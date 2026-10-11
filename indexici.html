@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VidyaLedger - Cloud Institute Account Book</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Firebase 11 SDK (Modular via ESM) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.FirebaseSDK = {
+      initializeApp,
+      getAuth,
+      signInAnonymously,
+      signInWithCustomToken,
+      onAuthStateChanged,
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      onSnapshot,
+      collection
+    };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-num {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #printableReceiptArea, #printableReceiptArea * {
+        visibility: visible !important;
+      }
+      #printableReceiptArea {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100vw !important;
+        margin: 0 !important;
+        padding: 30px !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
+        border: 2px solid #000000 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+  <!-- ==================== STRICT LOGIN VIEW ==================== -->
+  <div id="loginScreen" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-slate-100 space-y-5">
+      <div class="text-center space-y-1.5">
+        <div class="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-200">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <h2 id="loginInstituteName" class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Vidya Coaching Institute</h2>
+        <p class="text-xs text-slate-500 font-medium">Secured Multi-Device Cloud Management System</p>
+      </div>
+
+      <!-- Cloud Status Badge on Login Screen -->
+      <div id="loginSyncBadge" class="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+        <span class="flex items-center gap-2 text-slate-600 font-medium">
+          <span id="loginSyncDot" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span id="loginSyncText">Checking Cloud Sync...</span>
+        </span>
+        <span class="text-[10px] text-slate-400 font-mono">Real-Time DB</span>
+      </div>
+
+      <!-- Live Error / Alert Banner -->
+      <div id="loginAlertBox" class="hidden p-3 rounded-xl text-xs flex items-start gap-2">
+        <i id="loginAlertIcon" class="fa-solid fa-circle-exclamation mt-0.5"></i>
+        <div id="loginAlertMsg" class="font-medium"></div>
+      </div>
+
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">User ID *</label>
+          <div class="relative">
+            <i class="fa-solid fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="text" id="loginUserId" required placeholder="Enter User ID (e.g. admin)" 
+                   class="w-full text-xs sm:text-sm pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Password *</label>
+            <button type="button" onclick="toggleInputVisibility('loginUserPass', this)" class="text-[11px] text-slate-500 hover:text-indigo-600 font-semibold">
+              <i class="fa-solid fa-eye"></i> Show
+            </button>
+          </div>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="password" id="loginUserPass" required placeholder="••••••••" 
+                   class="w-full text-xs sm:text-sm pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 font-medium" />
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center justify-center gap-2">
+          <span>Sign In to Institute Portal</span>
+          <i class="fa-solid fa-arrow-right text-xs"></i>
+        </button>
+      </form>
+
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+        <span><i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Strict Auth Protected</span>
+        <span>Credentials Issued by Admin</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN APPLICATION CONTAINER ==================== -->
+  <div id="appContainer" class="hidden min-h-screen flex flex-col justify-between">
+    <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-indigo-700 rounded-xl flex items-center justify-center text-xl shadow">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 id="headerInstituteName" class="text-base sm:text-lg font-bold leading-tight">Vidya Coaching Institute</h1>
+              <!-- Realtime Cloud Sync Status Pill -->
+              <button onclick="openCloudConfigModal()" id="headerSyncPill" title="Click to view Cloud Database Connection"
+                      class="px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition border bg-amber-500/20 text-amber-300 border-amber-400">
+                <span id="headerSyncDot" class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span id="headerSyncLabel">Local Mode</span>
+              </button>
+            </div>
+            <p id="headerInstituteTagline" class="text-xs text-indigo-200">Adm Fee: ₹1,500 • 2nd Inst: ₹1,000 • Monthly: ₹300/mo</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 sm:space-x-2.5">
+          <div class="flex items-center space-x-2 bg-indigo-800/80 px-3 py-1.5 rounded-xl border border-indigo-700 text-xs">
+            <i class="fa-solid fa-circle-user text-indigo-300"></i>
+            <div>
+              <span id="activeUserDisplay" class="font-bold">Director</span>
+              <span id="activeRoleBadge" class="ml-1 text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded font-bold uppercase">DIRECTOR</span>
+            </div>
+          </div>
+
+          <!-- Cloud Sync Setup (Admin Only) -->
+          <button id="btnHeaderCloudSync" onclick="openCloudConfigModal()" title="Configure Multi-Device Cloud Sync"
+                  class="bg-indigo-800 hover:bg-indigo-700 border border-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-cloud-arrow-up text-cyan-300"></i> <span class="hidden sm:inline">Cloud Sync</span>
+          </button>
+
+          <!-- Change Password (Admin Only) -->
+          <button id="btnHeaderChangePass" onclick="openChangeMyPasswordModal()" title="Change Your Password"
+                  class="bg-indigo-800 hover:bg-indigo-700 border border-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-key text-amber-400"></i> <span class="hidden sm:inline">Password</span>
+          </button>
+
+          <!-- Institute Profile (Admin Only) -->
+          <button id="btnOpenInstituteSettings" onclick="openInstituteSettingsModal()" title="Modify Institute Details"
+                  class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-sliders"></i> <span class="hidden sm:inline">Profile</span>
+          </button>
+
+          <!-- Logout -->
+          <button onclick="logout()" title="Sign Out" class="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1">
+            <i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Logout</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="bg-indigo-950/80 border-t border-indigo-800/60">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 flex space-x-1 overflow-x-auto text-xs sm:text-sm font-semibold">
+          <button onclick="switchTab('dashboard')" id="nav-dashboard" class="tab-btn px-4 py-2.5 text-white border-b-2 border-amber-400 flex items-center gap-1.5 whitespace-nowrap">
+            <i class="fa-solid fa-chart-line"></i> Dashboard
+          </button>
+          <button onclick="switchTab('students')" id="nav-students" class="tab-btn px-4 py-2.5 text-indigo-200 hover:text-white border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+            <i class="fa-solid fa-user-graduate"></i> Students & Fees
+          </button>
+          <button onclick="switchTab('expenses')" id="nav-expenses" class="tab-btn px-4 py-2.5 text-indigo-200 hover:text-white border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+            <i class="fa-solid fa-receipt"></i> Expenses Register
+          </button>
+          <button onclick="switchTab('batches')" id="nav-batches" class="tab-btn px-4 py-2.5 text-indigo-200 hover:text-white border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+            <i class="fa-solid fa-layer-group"></i> Batches & Edit
+          </button>
+          <button onclick="switchTab('staff')" id="nav-staff" class="tab-btn px-4 py-2.5 text-indigo-200 hover:text-white border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+            <i class="fa-solid fa-user-shield"></i> Staff & Passwords
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+
+      <!-- Cloud Sync Prompt Alert (Only visible if Cloud Sync is not configured) -->
+      <div id="cloudBannerNotice" class="hidden p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-indigo-800 text-white shadow-md flex flex-wrap items-center justify-between gap-3 border border-indigo-700">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center text-lg font-bold">
+            <i class="fa-solid fa-mobile-screen"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-sm">Want Mobile & PC Live Sync?</h4>
+            <p class="text-xs text-indigo-200">Connect a free Firebase database in 1 minute so any fee collected on your phone shows on your PC instantly.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openCloudConfigModal()" class="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold rounded-xl text-xs transition shadow">
+            Connect Cloud Sync
+          </button>
+          <button onclick="dismissCloudBanner()" class="text-indigo-300 hover:text-white text-xs px-2 py-1">
+            Dismiss
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= TAB 1: DASHBOARD ================= -->
+      <section id="tab-dashboard" class="tab-content space-y-6">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+            <div class="flex items-center justify-between text-emerald-600 mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Fees Collected</span>
+              <i class="fa-solid fa-hand-holding-dollar text-base"></i>
+            </div>
+            <div id="statTotalCollected" class="text-2xl font-bold font-num text-slate-900">₹0</div>
+            <div class="text-[11px] text-slate-400 mt-1">Adm + 2nd Inst + Monthly</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
+            <div class="flex items-center justify-between text-rose-600 mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Expenses</span>
+              <i class="fa-solid fa-arrow-trend-down text-base"></i>
+            </div>
+            <div id="statTotalExpenses" class="text-2xl font-bold font-num text-rose-600">₹0</div>
+            <div class="text-[11px] text-slate-400 mt-1">Salaries, Rent & Bills</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-indigo-600">
+            <div class="flex items-center justify-between text-indigo-600 mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Net Institute Balance</span>
+              <i class="fa-solid fa-vault text-base"></i>
+            </div>
+            <div id="statNetProfit" class="text-2xl font-bold font-num text-indigo-700">₹0</div>
+            <div class="text-[11px] text-slate-400 mt-1">Fees Collected - Expenses</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
+            <div class="flex items-center justify-between text-amber-500 mb-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Pending Student Dues</span>
+              <i class="fa-solid fa-hourglass-half text-base"></i>
+            </div>
+            <div id="statTotalDues" class="text-2xl font-bold font-num text-amber-600">₹0</div>
+            <div class="text-[11px] text-slate-400 mt-1">Outstanding Receivables</div>
+          </div>
+        </div>
+
+        <!-- Breakdown by Fee Heads -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-amber-900 uppercase">Admission Fee (₹1,500)</span>
+              <div class="text-lg font-bold font-num text-amber-950 mt-0.5" id="statAdmCollected">₹0</div>
+              <span class="text-[11px] text-amber-800" id="statAdmPending">Pending: ₹0</span>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-amber-200/60 flex items-center justify-center text-amber-800">
+              <i class="fa-solid fa-id-card"></i>
+            </div>
+          </div>
+
+          <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-blue-900 uppercase">2nd Installment (₹1,000)</span>
+              <div class="text-lg font-bold font-num text-blue-950 mt-0.5" id="statInst2Collected">₹0</div>
+              <span class="text-[11px] text-blue-800" id="statInst2Pending">Pending: ₹0</span>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-blue-200/60 flex items-center justify-center text-blue-800">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+          </div>
+
+          <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-emerald-900 uppercase">Monthly Tuition (₹300/mo)</span>
+              <div class="text-lg font-bold font-num text-emerald-950 mt-0.5" id="statMonthlyCollected">₹0</div>
+              <span class="text-[11px] text-emerald-800" id="statMonthlyPending">Pending: ₹0</span>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-200/60 flex items-center justify-center text-emerald-800">
+              <i class="fa-solid fa-calendar-days"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
+            <h3 class="font-bold text-sm text-slate-800 mb-3 flex items-center justify-between">
+              <span>Financial Comparison (Fees Collected vs Expenses)</span>
+              <span class="text-xs font-normal text-slate-400">Total Amounts in INR (₹)</span>
+            </h3>
+            <div class="h-64 relative flex items-center justify-center">
+              <canvas id="cashflowChart"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="font-bold text-sm text-slate-800 mb-3">Collected Fee Heads Ratio</h3>
+            <div class="h-64 relative flex items-center justify-center">
+              <canvas id="ratioChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: STUDENTS & FEES ================= -->
+      <section id="tab-students" class="tab-content hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center space-x-2 flex-1 min-w-[220px]">
+            <div class="relative w-full">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+              <input type="text" id="studentSearchInput" onkeyup="renderStudents()" placeholder="Search student name, roll number, or phone..." 
+                     class="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:ring-2 focus:ring-indigo-600 bg-slate-50" />
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <select id="studentBatchFilter" onchange="renderStudents()" class="border border-slate-200 rounded-xl text-xs py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-600 bg-slate-50 font-medium">
+              <option value="ALL">All Batches</option>
+            </select>
+            <select id="studentStatusFilter" onchange="renderStudents()" class="border border-slate-200 rounded-xl text-xs py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-600 bg-slate-50 font-medium">
+              <option value="ALL">All Status</option>
+              <option value="DUE">Has Pending Dues</option>
+              <option value="CLEARED">All Cleared (₹0 Due)</option>
+            </select>
+            <button onclick="openNewStudentModal()" class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow transition">
+              <i class="fa-solid fa-user-plus"></i> Enroll Student
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-bold text-[11px]">
+                  <th class="p-3">Roll No</th>
+                  <th class="p-3">Student Name</th>
+                  <th class="p-3">Batch</th>
+                  <th class="p-3">Adm Date</th>
+                  <th class="p-3 text-right">Adm Fee (₹1,500)</th>
+                  <th class="p-3 text-right">2nd Inst (₹1,000)</th>
+                  <th class="p-3 text-right">Monthly (₹300/m)</th>
+                  <th class="p-3 text-right">Total Due</th>
+                  <th class="p-3 text-center w-36">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="studentTableBody" class="divide-y divide-slate-100 text-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: EXPENSES ================= -->
+      <section id="tab-expenses" class="tab-content hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Institute Expense Register</h3>
+            <p class="text-xs text-slate-400">Record teacher salaries, premises rent, bills, printing, and operations</p>
+          </div>
+          <button onclick="openAddExpenseModal()" class="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow transition">
+            <i class="fa-solid fa-plus"></i> Add Expense Voucher
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-bold text-[11px]">
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Voucher #</th>
+                  <th class="p-3">Category</th>
+                  <th class="p-3">Payee / Description</th>
+                  <th class="p-3">Payment Mode</th>
+                  <th class="p-3">Recorded By</th>
+                  <th class="p-3 text-right">Amount (₹)</th>
+                  <th class="p-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="expenseTableBody" class="divide-y divide-slate-100 text-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: BATCHES ================= -->
+      <section id="tab-batches" class="tab-content hidden space-y-4">
+        <div class="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Institute Batches Management</h3>
+            <p class="text-xs text-slate-400">Edit batch titles, schedules, faculty, or rename batch to migrate students automatically</p>
+          </div>
+          <button onclick="openAddBatchModal()" class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow transition">
+            <i class="fa-solid fa-plus"></i> Add New Batch
+          </button>
+        </div>
+
+        <div id="batchCardGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </section>
+
+      <!-- ================= TAB 5: STAFF & PASSWORDS ================= -->
+      <section id="tab-staff" class="tab-content hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Staff Credentials & Password Control (Admin Only)</h3>
+            <p class="text-xs text-slate-400">Strict ID & Password control. Only the Director can create staff logins, reset passwords, or share credentials.</p>
+          </div>
+          <button onclick="openAddStaffModal()" class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 shadow transition">
+            <i class="fa-solid fa-user-plus"></i> Create New Staff Account
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-bold text-[11px]">
+                <th class="p-3">User ID</th>
+                <th class="p-3">Staff Full Name</th>
+                <th class="p-3">Role</th>
+                <th class="p-3">Status</th>
+                <th class="p-3 text-center">Password Action</th>
+                <th class="p-3 text-center">Share Password</th>
+                <th class="p-3 text-center">Account Control</th>
+              </tr>
+            </thead>
+            <tbody id="staffTableBody" class="divide-y divide-slate-100 text-slate-700"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="border-t border-slate-200 py-3.5 bg-white text-center text-xs text-slate-400 font-medium">
+      VidyaLedger Cloud Institute Portal &bull; Live Mobile & PC Sync &bull; ₹1,500 Adm + ₹1,000 2nd Inst + ₹300/Month
+    </footer>
+  </div>
+
+  <!-- ==================== MODAL: CLOUD DATABASE SYNC SETTINGS ==================== -->
+  <div id="cloudConfigModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-cloud text-indigo-600"></i> Cloud Database Sync (Mobile & PC)
+        </h3>
+        <button onclick="closeModal('cloudConfigModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="p-3 bg-indigo-50/80 rounded-2xl border border-indigo-100 text-xs text-indigo-950 space-y-2">
+        <p class="font-bold flex items-center gap-1.5 text-indigo-900">
+          <i class="fa-solid fa-circle-info text-indigo-600"></i> Why connect Firebase Cloud Sync?
+        </p>
+        <p class="text-slate-600">
+          Browsers keep data isolated inside each device. By connecting a free Firebase database, your <strong>mobile phone and PC share the exact same live ledger</strong> in real time.
+        </p>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-1.5">
+        <p class="font-bold text-slate-900">Quick 2-Minute Setup Guide (100% Free):</p>
+        <ol class="list-decimal list-inside space-y-1 text-slate-600 text-[11px]">
+          <li>Visit <a href="https://console.firebase.google.com" target="_blank" class="text-indigo-600 underline font-semibold">console.firebase.google.com</a> and click <strong>Add Project</strong>.</li>
+          <li>Click <strong>Firestore Database</strong> &rarr; <strong>Create Database</strong> (start in Test Mode).</li>
+          <li>Click <strong>Project Settings (gear icon)</strong> &rarr; <strong>Add Web App (&lt;/&gt;)</strong>.</li>
+          <li>Copy the <code>firebaseConfig</code> code block and paste it below.</li>
+        </ol>
+      </div>
+
+      <form id="cloudConfigForm" onsubmit="saveCloudConfig(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Paste Firebase Config JSON Object or API Key *</label>
+          <textarea id="firebaseConfigInput" rows="5" required 
+                    placeholder='{&#10;  "apiKey": "AIzaSy...",&#10;  "authDomain": "your-app.firebaseapp.com",&#10;  "projectId": "your-app",&#10;  "storageBucket": "your-app.appspot.com",&#10;  "messagingSenderId": "...",&#10;  "appId": "..."&#10;}'
+                    class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] focus:ring-2 focus:ring-indigo-600"></textarea>
+        </div>
+
+        <div id="cloudStatusMsg" class="hidden p-2.5 rounded-xl text-xs font-semibold"></div>
+
+        <div class="pt-2 flex justify-between items-center">
+          <button type="button" onclick="clearCloudConfig()" class="text-rose-600 hover:text-rose-700 text-xs font-semibold">
+            Disconnect Cloud
+          </button>
+          <div class="flex space-x-2">
+            <button type="button" onclick="closeModal('cloudConfigModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+            <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Save & Sync Now</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: ADMIN SHARE CREDENTIALS ==================== -->
+  <div id="shareCredentialsModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-share-nodes text-indigo-600"></i> Share Staff Credentials
+        </h3>
+        <button onclick="closeModal('shareCredentialsModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-100 text-xs text-indigo-950 space-y-2">
+        <div class="font-semibold text-slate-600">Official Staff Login Details:</div>
+        <div class="space-y-1 font-mono text-xs">
+          <div>Staff: <strong id="shareStaffName" class="font-sans text-slate-900"></strong></div>
+          <div>User ID: <strong id="shareStaffId" class="text-indigo-700"></strong></div>
+          <div>Password: <strong id="shareStaffPass" class="text-emerald-700"></strong></div>
+          <div>Role: <span id="shareStaffRole" class="font-sans text-slate-700 font-bold"></span></div>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-600">Staff 10-Digit Mobile Number (Optional):</label>
+        <input type="tel" id="shareStaffPhone" placeholder="e.g. 9876543210" maxlength="10" 
+               class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-600" />
+      </div>
+
+      <div class="pt-2 flex flex-col gap-2">
+        <button onclick="shareStaffCredentialsWhatsApp()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5">
+          <i class="fa-brands fa-whatsapp text-sm"></i> Share via WhatsApp
+        </button>
+        <button onclick="copyStaffCredentialsToClipboard()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5">
+          <i class="fa-regular fa-copy"></i> Copy to Clipboard
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Change My Password Modal (Director Only) -->
+  <div id="changeMyPasswordModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-key text-amber-500"></i> Change Director Password
+        </h3>
+        <button onclick="closeModal('changeMyPasswordModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div id="changePassAlert" class="hidden p-2.5 rounded-xl text-xs font-semibold"></div>
+
+      <form id="changeMyPasswordForm" onsubmit="submitChangeMyPassword(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Current Password *</label>
+          <div class="relative">
+            <input type="password" id="myCurrentPass" required class="w-full p-2.5 pr-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="Enter existing password" />
+            <button type="button" onclick="toggleInputVisibility('myCurrentPass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">New Password *</label>
+          <div class="relative">
+            <input type="password" id="myNewPass" required minlength="4" class="w-full p-2.5 pr-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="Minimum 4 characters" />
+            <button type="button" onclick="toggleInputVisibility('myNewPass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Confirm New Password *</label>
+          <div class="relative">
+            <input type="password" id="myConfirmPass" required minlength="4" class="w-full p-2.5 pr-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="Re-type new password" />
+            <button type="button" onclick="toggleInputVisibility('myConfirmPass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('changeMyPasswordModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Save Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Admin Reset Staff Password Modal -->
+  <div id="resetStaffPasswordModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved text-amber-500"></i> Reset Staff Password
+        </h3>
+        <button onclick="closeModal('resetStaffPasswordModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700">
+        <div>Staff: <strong id="resetTargetStaffName" class="text-slate-900"></strong></div>
+        <div>User ID: <code id="resetTargetStaffId" class="text-indigo-600 font-bold"></code></div>
+      </div>
+
+      <form id="resetStaffPasswordForm" onsubmit="submitResetStaffPassword(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="resetTargetUserIdInput" />
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Set New Password *</label>
+          <div class="relative">
+            <input type="password" id="adminNewStaffPass" required minlength="4" class="w-full p-2.5 pr-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="Enter new password" />
+            <button type="button" onclick="toggleInputVisibility('adminNewStaffPass', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('resetStaffPasswordModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow transition">Update & Cloud Sync</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Add Staff Account Modal (ID + Password Creation) -->
+  <div id="staffModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-indigo-600"></i> Create Staff Account
+        </h3>
+        <button onclick="closeModal('staffModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="staffForm" onsubmit="saveStaffUser(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Staff Full Name *</label>
+          <input type="text" id="staffNameInput" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="e.g. Suman Sen" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Unique Login ID *</label>
+          <input type="text" id="staffIdInput" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-mono font-bold" placeholder="e.g. staff1" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Assign Password *</label>
+          <div class="relative">
+            <input type="password" id="staffPassInput" required minlength="4" class="w-full p-2.5 pr-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-medium" placeholder="••••••••" />
+            <button type="button" onclick="toggleInputVisibility('staffPassInput', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Access Role *</label>
+          <select id="staffRoleInput" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-semibold">
+            <option value="ACCOUNTANT">Accountant / Cashier</option>
+            <option value="DIRECTOR">Director / Admin</option>
+          </select>
+        </div>
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('staffModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Create Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Institute Details Customization Modal -->
+  <div id="instituteModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-indigo-600"></i> Institute Profile & Details
+          </h3>
+          <p class="text-xs text-slate-400">Updates header banner, receipts, and invoices dynamically</p>
+        </div>
+        <button onclick="closeModal('instituteModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="instituteSettingsForm" onsubmit="saveInstituteSettings(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Institute / Coaching Name *</label>
+          <input type="text" id="instName" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-semibold" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Tagline / Subtitle</label>
+          <input type="text" id="instTagline" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Contact Phone *</label>
+            <input type="text" id="instPhone" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Registration / GST Code</label>
+            <input type="text" id="instRegNo" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-mono" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Full Institute Address</label>
+          <textarea id="instAddress" rows="2" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600"></textarea>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Receipt Footer Terms</label>
+          <input type="text" id="instTerms" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" />
+        </div>
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('instituteModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Save Institute Details</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Student Enrollment Modal -->
+  <div id="studentModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-indigo-600"></i> Enroll New Student
+        </h3>
+        <button onclick="closeModal('studentModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="studentEnrollForm" onsubmit="saveStudent(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Student Full Name *</label>
+          <input type="text" id="studName" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" placeholder="e.g. Rahul Sharma" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Roll / Student ID *</label>
+            <input type="text" id="studRoll" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-mono" placeholder="e.g. 101" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Assigned Batch *</label>
+            <select id="studBatch" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600"></select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">WhatsApp / Phone *</label>
+            <input type="tel" id="studPhone" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" placeholder="9876543210" maxlength="10" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Admission Date *</label>
+            <input type="date" id="studDate" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" />
+          </div>
+        </div>
+
+        <div class="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl text-[11px] text-indigo-900 space-y-1">
+          <div class="font-bold flex items-center gap-1.5 text-indigo-950">
+            <i class="fa-solid fa-calculator text-indigo-600"></i> Institute Standard Fee Structure:
+          </div>
+          <div class="flex justify-between text-indigo-800">
+            <span>&bull; Adm: <strong>₹1,500</strong></span>
+            <span>&bull; 2nd Inst: <strong>₹1,000</strong></span>
+            <span>&bull; Monthly: <strong>₹300 / mo</strong></span>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('studentModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Save & Enroll</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Collect Fee Modal -->
+  <div id="feeCollectModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-indian-rupee-sign text-emerald-600"></i> Collect Student Fee
+        </h3>
+        <button onclick="closeModal('feeCollectModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div id="feeCollectStudentHeader" class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs"></div>
+
+      <form id="feeCollectForm" onsubmit="submitFeePayment(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="feeStudentId" />
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Fee Head *</label>
+          <select id="feeType" onchange="autoFillFeeAmount()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600 font-semibold">
+            <option value="ADMISSION">Admission Fee (₹1,500)</option>
+            <option value="INSTALLMENT_2">2nd Installment (₹1,000)</option>
+            <option value="MONTHLY">Monthly Tuition Fee (₹300/mo)</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Amount Collecting (₹) *</label>
+            <input type="number" id="feeAmount" required min="1" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold font-num text-emerald-600 text-sm focus:ring-2 focus:ring-emerald-600" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Payment Mode *</label>
+            <select id="feeMode" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600 font-medium">
+              <option value="UPI / PhonePe / GPay">UPI / PhonePe / GPay</option>
+              <option value="Cash Counter">Cash Counter</option>
+              <option value="Net Banking / NEFT">Net Banking / NEFT</option>
+              <option value="Cheque">Cheque</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Payment Date *</label>
+          <input type="date" id="feeDate" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600" />
+        </div>
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('feeCollectModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition">Collect & Generate Receipt</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Printable Fee Receipt Modal -->
+  <div id="receiptModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-100 relative space-y-4">
+      <div class="no-print flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-receipt text-indigo-600"></i> Fee Receipt Preview
+        </h3>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-print"></i> Print Receipt
+          </button>
+          <button onclick="closeModal('receiptModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+      </div>
+
+      <div id="printableReceiptArea" class="p-6 border-2 border-slate-900 rounded-2xl bg-white text-slate-900 space-y-4">
+        <div class="text-center border-b-2 border-slate-900 pb-3">
+          <h2 id="receiptInstName" class="text-lg font-extrabold uppercase tracking-tight">Vidya Coaching Institute</h2>
+          <p id="receiptInstAddress" class="text-[11px] text-slate-600 font-medium">Near City Center, M.G. Road</p>
+          <p id="receiptInstPhone" class="text-[10px] text-slate-500">Phone: +91 98765 43210</p>
+          <div class="inline-block px-3 py-0.5 bg-slate-900 text-white font-bold text-[10px] rounded-full mt-2 uppercase tracking-widest">
+            FEE RECEIPT / PAYMENT ACKNOWLEDGMENT
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 text-xs py-2 border-b border-slate-200 gap-y-1">
+          <div><span class="text-slate-500">Receipt No:</span> <strong id="rNumber" class="font-mono">#001</strong></div>
+          <div class="text-right"><span class="text-slate-500">Date:</span> <strong id="rDate">01/01/2026</strong></div>
+          <div><span class="text-slate-500">Student Name:</span> <strong id="rStudentName">Rahul</strong></div>
+          <div class="text-right"><span class="text-slate-500">Roll No:</span> <strong id="rStudentRoll">101</strong></div>
+          <div><span class="text-slate-500">Batch:</span> <span id="rStudentBatch">Class 10</span></div>
+          <div class="text-right"><span class="text-slate-500">Payment Mode:</span> <span id="rMode">UPI</span></div>
+        </div>
+
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-slate-300 font-bold text-slate-700">
+              <th class="text-left pb-1.5">Description / Fee Head</th>
+              <th class="text-right pb-1.5">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td id="rFeeType" class="py-2.5 font-bold">Admission Fee</td>
+              <td id="rAmount" class="py-2.5 text-right font-bold font-num text-sm text-emerald-700">₹0</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-slate-900">
+              <td class="pt-2 font-extrabold uppercase">Total Received Amount</td>
+              <td id="rTotalAmount" class="pt-2 text-right font-extrabold font-num text-base text-slate-900">₹0</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="pt-6 flex justify-between items-end text-xs text-slate-600">
+          <div>
+            <p id="receiptInstTerms" class="text-[10px] text-slate-500 italic max-w-xs">Fees once paid are non-refundable.</p>
+            <p class="text-[11px] font-semibold text-slate-700 mt-1">Cashier: <span id="rCashier">Admin</span></p>
+          </div>
+          <div class="text-center">
+            <div class="w-28 border-b border-slate-900 mb-1"></div>
+            <span class="text-[11px] font-bold">Authorized Signatory</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Expense Modal -->
+  <div id="expenseModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-receipt text-rose-600"></i> Record Expense Voucher
+        </h3>
+        <button onclick="closeModal('expenseModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="expenseForm" onsubmit="saveExpense(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Expense Category *</label>
+          <select id="expCategory" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-600 font-semibold">
+            <option value="Teacher Salary">Faculty / Teacher Salary</option>
+            <option value="Premises Rent">Premises / Floor Rent</option>
+            <option value="Electricity & Water">Electricity & Water Bills</option>
+            <option value="Notes & Printing">Notes, Printing & Stationery</option>
+            <option value="Refreshments & Tea">Tea & Refreshments</option>
+            <option value="Internet & Software">Internet & Software</option>
+            <option value="Maintenance & Cleaning">Maintenance & Cleaning</option>
+            <option value="Marketing & Banners">Marketing & Banners</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Payee / Description *</label>
+          <input type="text" id="expDesc" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-600 font-medium" placeholder="e.g. Ramesh Verma (Math Faculty)" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Amount (₹) *</label>
+            <input type="number" id="expAmount" required min="1" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold font-num text-rose-600 text-sm focus:ring-2 focus:ring-rose-600" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Payment Mode *</label>
+            <select id="expMode" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-600 font-medium">
+              <option value="UPI">UPI</option>
+              <option value="Cash">Cash</option>
+              <option value="Bank Transfer">Bank Transfer / NEFT</option>
+              <option value="Cheque">Cheque</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Expense Date *</label>
+          <input type="date" id="expDate" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-600" />
+        </div>
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('expenseModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow transition">Save Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Batch Modal -->
+  <div id="batchModal" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900" id="batchModalTitle">Add New Batch</h3>
+        <button onclick="closeModal('batchModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="batchForm" onsubmit="saveBatch(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="editBatchOriginalName" />
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Batch Name *</label>
+          <input type="text" id="batchNameInput" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600 font-semibold" placeholder="e.g. Batch A (Morning)" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Timings / Schedule *</label>
+          <input type="text" id="batchTimeInput" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" placeholder="e.g. 7:30 AM - 9:30 AM" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Faculty / Teacher</label>
+          <input type="text" id="batchTeacherInput" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-600" placeholder="e.g. Prof. Verma" />
+        </div>
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('batchModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">Save Batch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    /* ==================== GLOBAL APP STATE & CONSTANTS ==================== */
+    const DEFAULT_INSTITUTE = {
+      name: "Vidya Coaching Institute",
+      tagline: "Adm Fee: ₹1,500 • 2nd Inst: ₹1,000 • Monthly: ₹300/mo",
+      address: "Sai Complex, M.G. Road, Pune",
+      phone: "+91 98765 43210",
+      regNo: "EDU/MH/2026/7821",
+      terms: "Fees once paid are non-refundable and non-transferable."
+    };
+
+    const DEFAULT_USERS = [
+      { id: "admin", name: "Director / Owner", pass: "admin123", role: "DIRECTOR", active: true },
+      { id: "accountant", name: "Front Desk Cashier", pass: "acc123", role: "ACCOUNTANT", active: true }
+    ];
+
+    const DEFAULT_BATCHES = [
+      { name: "Batch A (Morning)", time: "07:30 AM - 09:30 AM", teacher: "Prof. Verma" },
+      { name: "Batch B (Evening)", time: "05:00 PM - 07:00 PM", teacher: "Prof. Sharma" }
+    ];
+
+    const DEFAULT_STUDENTS = [
+      {
+        id: "st_1",
+        name: "Aarav Patel",
+        roll: "101",
+        batch: "Batch A (Morning)",
+        phone: "9820112233",
+        joinDate: "2026-08-01",
+        feesPaid: { admission: 1500, installment2: 1000, monthlyMonths: 2 }
+      },
+      {
+        id: "st_2",
+        name: "Priya Sharma",
+        roll: "102",
+        batch: "Batch B (Evening)",
+        phone: "9876543210",
+        joinDate: "2026-09-01",
+        feesPaid: { admission: 1500, installment2: 500, monthlyMonths: 1 }
+      }
+    ];
+
+    const DEFAULT_EXPENSES = [
+      { id: "exp_1", date: "2026-10-01", category: "Premises Rent", desc: "Main Classroom Monthly Rent", amount: 8000, mode: "Bank Transfer", by: "Director" },
+      { id: "exp_2", date: "2026-10-02", category: "Teacher Salary", desc: "Faculty Advance Allowance", amount: 6500, mode: "UPI", by: "Director" }
+    ];
+
+    function loadData(key, fallback) {
+      try {
+        const val = localStorage.getItem(key);
+        return val ? JSON.parse(val) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function saveData(key, val) {
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+      } catch (e) {}
+    }
+
+    // Active Application State in Memory
+    let institute = loadData('vidya_inst_info', DEFAULT_INSTITUTE);
+    let users = loadData('vidya_inst_users', DEFAULT_USERS);
+    let batches = loadData('vidya_inst_batches', DEFAULT_BATCHES);
+    let students = loadData('vidya_inst_students', DEFAULT_STUDENTS);
+    let expenses = loadData('vidya_inst_expenses', DEFAULT_EXPENSES);
+    let currentUser = null;
+    let cashflowChart = null;
+    let ratioChart = null;
+
+    // Currency Formatter
+    const inr = (num) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num || 0);
+
+    /* ==================== FIREBASE CLOUD DATABASE SYNC ENGINE ==================== */
+    let db = null;
+    let auth = null;
+    let isCloudConnected = false;
+    let activeFirestoreUnsubscribe = null;
+    const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'vidya-ledger-institute';
+
+    async function initCloudSync() {
+      const savedConfig = getFirebaseConfig();
+      if (!savedConfig) {
+        updateSyncUIStatus(false, "Local Mode (This Device Only)");
+        const bannerDismissed = sessionStorage.getItem('vidya_banner_dismissed');
+        if (!bannerDismissed && document.getElementById('cloudBannerNotice')) {
+          document.getElementById('cloudBannerNotice').classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        if (!window.FirebaseSDK) {
+          setTimeout(initCloudSync, 400);
+          return;
+        }
+
+        const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, doc, onSnapshot } = window.FirebaseSDK;
+        const app = initializeApp(savedConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Authenticate (Custom Token or Anonymous)
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        isCloudConnected = true;
+        updateSyncUIStatus(true, "Cloud Sync Active (Live)");
+        if (document.getElementById('cloudBannerNotice')) {
+          document.getElementById('cloudBannerNotice').classList.add('hidden');
+        }
+
+        // Strict Path: /artifacts/{appId}/public/data/instituteLedger
+        const ledgerDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'instituteLedger');
+
+        // Real-Time Listener: onSnapshot
+        if (activeFirestoreUnsubscribe) activeFirestoreUnsubscribe();
+        activeFirestoreUnsubscribe = onSnapshot(ledgerDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.institute) { institute = data.institute; saveData('vidya_inst_info', institute); }
+            if (data.users && Array.isArray(data.users)) { users = data.users; saveData('vidya_inst_users', users); }
+            if (data.batches && Array.isArray(data.batches)) { batches = data.batches; saveData('vidya_inst_batches', batches); }
+            if (data.students && Array.isArray(data.students)) { students = data.students; saveData('vidya_inst_students', students); }
+            if (data.expenses && Array.isArray(data.expenses)) { expenses = data.expenses; saveData('vidya_inst_expenses', expenses); }
+
+            applyInstituteHeaders();
+            initBatchesDropdown();
+            if (currentUser) {
+              renderDashboard();
+              renderStudents();
+              renderExpenses();
+              renderBatches();
+              renderStaff();
+            }
+          } else {
+            // First time initialization in cloud
+            pushStateToCloud();
+          }
+        }, (err) => {
+          console.warn("Firestore sync warning:", err);
+          updateSyncUIStatus(false, "Sync Paused (Retrying...)");
+        });
+
+      } catch (err) {
+        console.warn("Firebase Init failed:", err);
+        updateSyncUIStatus(false, "Local Mode (Check Cloud Config)");
+      }
+    }
+
+    async function pushStateToCloud() {
+      if (!db || !isCloudConnected || !window.FirebaseSDK) return;
+      try {
+        const { doc, setDoc } = window.FirebaseSDK;
+        const ledgerDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'instituteLedger');
+        await setDoc(ledgerDocRef, {
+          institute,
+          users,
+          batches,
+          students,
+          expenses,
+          lastUpdated: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Error pushing state to Firestore:", e);
+      }
+    }
+
+    function getFirebaseConfig() {
+      if (typeof __firebase_config !== 'undefined') {
+        try { return JSON.parse(__firebase_config); } catch (e) {}
+      }
+      const userStored = localStorage.getItem('vidya_firebase_custom_config');
+      if (userStored) {
+        try { return JSON.parse(userStored); } catch (e) {}
+      }
+      return null;
+    }
+
+    function updateSyncUIStatus(connected, label) {
+      const loginDot = document.getElementById('loginSyncDot');
+      const loginText = document.getElementById('loginSyncText');
+      const headerPill = document.getElementById('headerSyncPill');
+      const headerDot = document.getElementById('headerSyncDot');
+      const headerLabel = document.getElementById('headerSyncLabel');
+
+      if (loginDot && loginText) {
+        loginDot.className = connected ? "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" : "w-2.5 h-2.5 rounded-full bg-amber-400";
+        loginText.textContent = label;
+      }
+      if (headerPill && headerDot && headerLabel) {
+        headerLabel.textContent = label;
+        if (connected) {
+          headerPill.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition border bg-emerald-500/20 text-emerald-300 border-emerald-400";
+          headerDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
+        } else {
+          headerPill.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition border bg-amber-500/20 text-amber-300 border-amber-400";
+          headerDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400";
+        }
+      }
+    }
+
+    function openCloudConfigModal() {
+      const existing = localStorage.getItem('vidya_firebase_custom_config') || (typeof __firebase_config !== 'undefined' ? __firebase_config : '');
+      document.getElementById('firebaseConfigInput').value = existing;
+      const statusMsg = document.getElementById('cloudStatusMsg');
+      statusMsg.classList.add('hidden');
+      openModal('cloudConfigModal');
+    }
+
+    async function saveCloudConfig(e) {
+      e.preventDefault();
+      const raw = document.getElementById('firebaseConfigInput').value.trim();
+      const statusMsg = document.getElementById('cloudStatusMsg');
+
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed.apiKey || !parsed.projectId) {
+          throw new Error("Missing apiKey or projectId in Firebase configuration.");
+        }
+        localStorage.setItem('vidya_firebase_custom_config', JSON.stringify(parsed));
+        statusMsg.className = "p-2.5 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold";
+        statusMsg.textContent = "Connecting to Firebase Firestore...";
+        statusMsg.classList.remove('hidden');
+
+        await initCloudSync();
+        pushStateToCloud();
+
+        setTimeout(() => {
+          closeModal('cloudConfigModal');
+          alert("Success! Cloud database connected. Changes made on your mobile or PC will now sync in real time.");
+        }, 1000);
+
+      } catch (err) {
+        statusMsg.className = "p-2.5 rounded-xl text-xs bg-rose-50 border border-rose-200 text-rose-800 font-semibold";
+        statusMsg.textContent = "Invalid Firebase configuration object. Please paste the valid JSON config from Firebase console.";
+        statusMsg.classList.remove('hidden');
+      }
+    }
+
+    function clearCloudConfig() {
+      if (!confirm("Are you sure you want to disconnect Cloud Sync? The app will return to local browser storage.")) return;
+      localStorage.removeItem('vidya_firebase_custom_config');
+      document.getElementById('firebaseConfigInput').value = '';
+      if (activeFirestoreUnsubscribe) activeFirestoreUnsubscribe();
+      db = null;
+      isCloudConnected = false;
+      updateSyncUIStatus(false, "Local Mode");
+      closeModal('cloudConfigModal');
+      alert("Cloud database disconnected. Operating in local mode.");
+    }
+
+    function dismissCloudBanner() {
+      sessionStorage.setItem('vidya_banner_dismissed', 'true');
+      const b = document.getElementById('cloudBannerNotice');
+      if (b) b.classList.add('hidden');
+    }
+
+    /* ==================== STRICT AUTHENTICATION ==================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      const today = new Date().toISOString().split('T')[0];
+      if (document.getElementById('studDate')) document.getElementById('studDate').value = today;
+      if (document.getElementById('feeDate')) document.getElementById('feeDate').value = today;
+      if (document.getElementById('expDate')) document.getElementById('expDate').value = today;
+
+      initCloudSync();
+
+      const savedUserId = sessionStorage.getItem('vidya_active_user_id');
+      if (savedUserId) {
+        const user = users.find(u => u.id.toLowerCase() === savedUserId.toLowerCase());
+        if (user && user.active) {
+          loginSuccess(user);
+          return;
+        }
+      }
+      showLoginScreen();
+    });
+
+    function toggleInputVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i> Hide';
+      } else {
+        input.type = 'password';
+        btn.innerHTML = '<i class="fa-solid fa-eye"></i> Show';
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const enteredId = document.getElementById('loginUserId').value.trim();
+      const enteredPass = document.getElementById('loginUserPass').value.trim();
+      const alertBox = document.getElementById('loginAlertBox');
+      const alertMsg = document.getElementById('loginAlertMsg');
+      const alertIcon = document.getElementById('loginAlertIcon');
+
+      // Check current users list
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const matchedUser = users.find(u => u.id.toLowerCase() === enteredId.toLowerCase());
+
+      if (!matchedUser) {
+        alertBox.className = "p-3 rounded-xl text-xs flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700";
+        alertIcon.className = "fa-solid fa-circle-exclamation mt-0.5 text-rose-500";
+        alertMsg.textContent = `User ID "${enteredId}" does not exist. Please contact your Director.`;
+        alertBox.classList.remove('hidden');
+        return;
+      }
+
+      if (matchedUser.pass !== enteredPass) {
+        alertBox.className = "p-3 rounded-xl text-xs flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700";
+        alertIcon.className = "fa-solid fa-circle-exclamation mt-0.5 text-rose-500";
+        alertMsg.textContent = "Incorrect password. Please contact your Director.";
+        alertBox.classList.remove('hidden');
+        return;
+      }
+
+      if (!matchedUser.active) {
+        alertBox.className = "p-3 rounded-xl text-xs flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700";
+        alertIcon.className = "fa-solid fa-circle-exclamation mt-0.5 text-rose-500";
+        alertMsg.textContent = "This account has been deactivated by the Director.";
+        alertBox.classList.remove('hidden');
+        return;
+      }
+
+      alertBox.classList.add('hidden');
+      sessionStorage.setItem('vidya_active_user_id', matchedUser.id);
+      loginSuccess(matchedUser);
+    });
+
+    function loginSuccess(user) {
+      currentUser = user;
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('appContainer').classList.remove('hidden');
+
+      document.getElementById('activeUserDisplay').textContent = user.name;
+      const roleBadge = document.getElementById('activeRoleBadge');
+      roleBadge.textContent = user.role;
+
+      const staffNav = document.getElementById('nav-staff');
+      const instBtn = document.getElementById('btnOpenInstituteSettings');
+      const changePassBtn = document.getElementById('btnHeaderChangePass');
+      const cloudSyncBtn = document.getElementById('btnHeaderCloudSync');
+
+      if (user.role !== 'DIRECTOR') {
+        roleBadge.className = 'ml-1 text-[10px] bg-emerald-400 text-slate-900 px-1.5 py-0.5 rounded font-bold uppercase';
+        if (staffNav) staffNav.classList.add('hidden');
+        if (instBtn) instBtn.classList.add('hidden');
+        if (changePassBtn) changePassBtn.classList.add('hidden');
+        if (cloudSyncBtn) cloudSyncBtn.classList.add('hidden');
+      } else {
+        roleBadge.className = 'ml-1 text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded font-bold uppercase';
+        if (staffNav) staffNav.classList.remove('hidden');
+        if (instBtn) instBtn.classList.remove('hidden');
+        if (changePassBtn) changePassBtn.classList.remove('hidden');
+        if (cloudSyncBtn) cloudSyncBtn.classList.remove('hidden');
+      }
+
+      applyInstituteHeaders();
+      initBatchesDropdown();
+      switchTab('dashboard');
+    }
+
+    function logout() {
+      sessionStorage.removeItem('vidya_active_user_id');
+      currentUser = null;
+      document.getElementById('appContainer').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    function showLoginScreen() {
+      document.getElementById('loginInstituteName').textContent = institute.name;
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('appContainer').classList.add('hidden');
+    }
+
+    /* ==================== PASSWORD & CREDENTIAL MANAGEMENT ==================== */
+    function openChangeMyPasswordModal() {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      document.getElementById('changeMyPasswordForm').reset();
+      const alertBox = document.getElementById('changePassAlert');
+      if (alertBox) alertBox.classList.add('hidden');
+      openModal('changeMyPasswordModal');
+    }
+
+    function submitChangeMyPassword(e) {
+      e.preventDefault();
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+
+      const currentPass = document.getElementById('myCurrentPass').value;
+      const newPass = document.getElementById('myNewPass').value;
+      const confirmPass = document.getElementById('myConfirmPass').value;
+      const alertBox = document.getElementById('changePassAlert');
+
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const userIndex = users.findIndex(u => u.id.toLowerCase() === currentUser.id.toLowerCase());
+
+      if (userIndex === -1 || users[userIndex].pass !== currentPass) {
+        alertBox.className = "p-2.5 rounded-xl text-xs bg-rose-50 border border-rose-200 text-rose-700 font-semibold";
+        alertBox.textContent = "Current password is incorrect!";
+        alertBox.classList.remove('hidden');
+        return;
+      }
+
+      if (newPass !== confirmPass) {
+        alertBox.className = "p-2.5 rounded-xl text-xs bg-rose-50 border border-rose-200 text-rose-700 font-semibold";
+        alertBox.textContent = "New password and Confirm password do not match!";
+        alertBox.classList.remove('hidden');
+        return;
+      }
+
+      users[userIndex].pass = newPass;
+      currentUser.pass = newPass;
+      saveData('vidya_inst_users', users);
+      pushStateToCloud();
+
+      alertBox.className = "p-2.5 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold";
+      alertBox.textContent = "Password changed and synced successfully!";
+      alertBox.classList.remove('hidden');
+
+      renderStaff();
+      setTimeout(() => { closeModal('changeMyPasswordModal'); }, 1200);
+    }
+
+    let activeShareUser = null;
+    function openShareCredentialsModal(userId) {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const targetUser = users.find(u => u.id.toLowerCase() === userId.toLowerCase());
+      if (!targetUser) return;
+
+      activeShareUser = targetUser;
+      document.getElementById('shareStaffName').textContent = targetUser.name;
+      document.getElementById('shareStaffId').textContent = targetUser.id;
+      document.getElementById('shareStaffPass').textContent = targetUser.pass;
+      document.getElementById('shareStaffRole').textContent = targetUser.role;
+      document.getElementById('shareStaffPhone').value = targetUser.phone || '';
+
+      openModal('shareCredentialsModal');
+    }
+
+    function copyStaffCredentialsToClipboard() {
+      if (!activeShareUser) return;
+      const text = `*${institute.name}* - Staff Portal Login\n` +
+                   `Staff Name: ${activeShareUser.name}\n` +
+                   `Role: ${activeShareUser.role}\n` +
+                   `User ID: ${activeShareUser.id}\n` +
+                   `Password: ${activeShareUser.pass}\n\n` +
+                   `Please keep these login credentials confidential.`;
+
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        alert(`Credentials for ${activeShareUser.name} copied to clipboard!`);
+      } catch (err) {
+        alert("Copy failed. Please copy manually.");
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function shareStaffCredentialsWhatsApp() {
+      if (!activeShareUser) return;
+      const phoneInput = document.getElementById('shareStaffPhone').value.trim();
+      const message = encodeURIComponent(
+        `Hello ${activeShareUser.name},\n\nHere are your login credentials for *${institute.name}*:\n\n` +
+        `👤 *User ID:* ${activeShareUser.id}\n` +
+        `🔑 *Password:* ${activeShareUser.pass}\n` +
+        `🏷️ *Role:* ${activeShareUser.role}\n\n` +
+        `Please keep this password safe.`
+      );
+
+      if (phoneInput && phoneInput.length === 10) {
+        window.open(`https://wa.me/91${phoneInput}?text=${message}`, '_blank');
+      } else {
+        window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+      }
+    }
+
+    function openResetStaffPasswordModal(userId) {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const user = users.find(u => u.id.toLowerCase() === userId.toLowerCase());
+      if (!user) return;
+
+      document.getElementById('resetTargetUserIdInput').value = user.id;
+      document.getElementById('resetTargetStaffName').textContent = user.name;
+      document.getElementById('resetTargetStaffId').textContent = user.id;
+      document.getElementById('resetStaffPasswordForm').reset();
+      openModal('resetStaffPasswordModal');
+    }
+
+    function submitResetStaffPassword(e) {
+      e.preventDefault();
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+
+      const targetId = document.getElementById('resetTargetUserIdInput').value;
+      const newPass = document.getElementById('adminNewStaffPass').value;
+
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const userIndex = users.findIndex(u => u.id.toLowerCase() === targetId.toLowerCase());
+      if (userIndex !== -1) {
+        users[userIndex].pass = newPass;
+        saveData('vidya_inst_users', users);
+        if (currentUser && currentUser.id.toLowerCase() === targetId.toLowerCase()) {
+          currentUser.pass = newPass;
+        }
+        pushStateToCloud();
+        closeModal('resetStaffPasswordModal');
+        renderStaff();
+        alert(`Password for "${users[userIndex].name}" (${targetId}) updated to "${newPass}". Ready to share.`);
+      }
+    }
+
+    function openAddStaffModal() {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      document.getElementById('staffForm').reset();
+      openModal('staffModal');
+    }
+
+    function saveStaffUser(e) {
+      e.preventDefault();
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+
+      const id = document.getElementById('staffIdInput').value.trim();
+      const pass = document.getElementById('staffPassInput').value.trim();
+      const name = document.getElementById('staffNameInput').value.trim();
+      const role = document.getElementById('staffRoleInput').value;
+
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+
+      if (users.find(u => u.id.toLowerCase() === id.toLowerCase())) {
+        alert(`User ID "${id}" already exists. Please choose a unique User ID.`);
+        return;
+      }
+
+      const newStaff = { id, name, pass, role, active: true };
+      users.push(newStaff);
+      saveData('vidya_inst_users', users);
+      pushStateToCloud();
+
+      closeModal('staffModal');
+      renderStaff();
+      openShareCredentialsModal(id);
+    }
+
+    function toggleUserStatus(id) {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      const u = users.find(user => user.id.toLowerCase() === id.toLowerCase());
+      if (u) {
+        u.active = !u.active;
+        saveData('vidya_inst_users', users);
+        pushStateToCloud();
+        renderStaff();
+      }
+    }
+
+    function deleteUser(id) {
+      if (!currentUser || currentUser.role !== 'DIRECTOR') return;
+      if (!confirm("Are you sure you want to remove this staff account?")) return;
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+      users = users.filter(u => u.id.toLowerCase() !== id.toLowerCase());
+      saveData('vidya_inst_users', users);
+      pushStateToCloud();
+      renderStaff();
+    }
+
+    function renderStaff() {
+      const tbody = document.getElementById('staffTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      users = loadData('vidya_inst_users', DEFAULT_USERS);
+
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold text-slate-800">${u.id}</td>
+          <td class="p-3 font-bold text-slate-700">${u.name}</td>
+          <td class="p-3">
+            <span class="text-xs px-2 py-0.5 rounded-lg font-bold ${u.role === 'DIRECTOR' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+              ${u.role}
+            </span>
+          </td>
+          <td class="p-3">
+            <span class="text-xs font-semibold ${u.active ? 'text-emerald-600' : 'text-rose-500'}">
+              ${u.active ? 'Active' : 'Disabled'}
+            </span>
+          </td>
+          <td class="p-3 text-center">
+            <button onclick="openResetStaffPasswordModal('${u.id}')" class="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1 mx-auto">
+              <i class="fa-solid fa-key text-[10px]"></i> Reset Pass
+            </button>
+          </td>
+          <td class="p-3 text-center">
+            <button onclick="openShareCredentialsModal('${u.id}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition flex items-center gap-1 mx-auto shadow-sm">
+              <i class="fa-solid fa-share-nodes text-[10px]"></i> Share
+            </button>
+          </td>
+          <td class="p-3 text-center">
+            ${u.id.toLowerCase() !== 'admin' ? `
+              <button onclick="toggleUserStatus('${u.id}')" class="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold mr-1">
+                ${u.active ? 'Disable' : 'Enable'}
+              </button>
+              <button onclick="deleteUser('${u.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="Delete Account">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            ` : '<span class="text-slate-400 italic text-[11px]">Primary Admin</span>'}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ==================== TABS & NAVIGATION ==================== */
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('text-white', 'border-amber-400');
+        btn.classList.add('text-indigo-200', 'border-transparent');
+      });
+
+      const target = document.getElementById('tab-' + tabId);
+      const targetNav = document.getElementById('nav-' + tabId);
+      if (target) target.classList.remove('hidden');
+      if (targetNav) {
+        targetNav.classList.add('text-white', 'border-amber-400');
+        targetNav.classList.remove('text-indigo-200', 'border-transparent');
+      }
+
+      if (tabId === 'dashboard') renderDashboard();
+      if (tabId === 'students') renderStudents();
+      if (tabId === 'expenses') renderExpenses();
+      if (tabId === 'batches') renderBatches();
+      if (tabId === 'staff') renderStaff();
+    }
+
+    function applyInstituteHeaders() {
+      document.getElementById('headerInstituteName').textContent = institute.name;
+      document.getElementById('headerInstituteTagline').textContent = institute.tagline;
+      document.getElementById('loginInstituteName').textContent = institute.name;
+      document.title = institute.name + " - Account Book";
+    }
+
+    /* ==================== FEE CALCULATIONS (₹1500 / ₹1000 / ₹300) ==================== */
+    function calculateStudentDues(st) {
+      const admDue = Math.max(0, 1500 - (st.feesPaid.admission || 0));
+      const inst2Due = Math.max(0, 1000 - (st.feesPaid.installment2 || 0));
+
+      const join = new Date(st.joinDate);
+      const now = new Date();
+      let monthsPassed = (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth()) + 1;
+      if (monthsPassed < 1) monthsPassed = 1;
+
+      const monthlyPaidMonths = st.feesPaid.monthlyMonths || 0;
+      const unpaidMonths = Math.max(0, monthsPassed - monthlyPaidMonths);
+      const monthlyDue = unpaidMonths * 300;
+
+      const totalDue = admDue + inst2Due + monthlyDue;
+      const totalPaid = (st.feesPaid.admission || 0) + (st.feesPaid.installment2 || 0) + (monthlyPaidMonths * 300);
+
+      return { admDue, inst2Due, monthlyDue, totalDue, totalPaid, unpaidMonths, monthsPassed };
+    }
+
+    function renderDashboard() {
+      let totalCollected = 0;
+      let totalDues = 0;
+      let totalAdmCollected = 0;
+      let totalInst2Collected = 0;
+      let totalMonthlyCollected = 0;
+      let totalAdmDue = 0;
+      let totalInst2Due = 0;
+      let totalMonthlyDue = 0;
+
+      students.forEach(st => {
+        const cal = calculateStudentDues(st);
+        totalCollected += cal.totalPaid;
+        totalDues += cal.totalDue;
+        totalAdmCollected += (st.feesPaid.admission || 0);
+        totalInst2Collected += (st.feesPaid.installment2 || 0);
+        totalMonthlyCollected += ((st.feesPaid.monthlyMonths || 0) * 300);
+
+        totalAdmDue += cal.admDue;
+        totalInst2Due += cal.inst2Due;
+        totalMonthlyDue += cal.monthlyDue;
+      });
+
+      const totalExpenses = expenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      const netProfit = totalCollected - totalExpenses;
+
+      document.getElementById('statTotalCollected').textContent = inr(totalCollected);
+      document.getElementById('statTotalExpenses').textContent = inr(totalExpenses);
+      document.getElementById('statNetProfit').textContent = inr(netProfit);
+      document.getElementById('statTotalDues').textContent = inr(totalDues);
+
+      document.getElementById('statAdmCollected').textContent = inr(totalAdmCollected);
+      document.getElementById('statAdmPending').textContent = `Pending: ${inr(totalAdmDue)}`;
+
+      document.getElementById('statInst2Collected').textContent = inr(totalInst2Collected);
+      document.getElementById('statInst2Pending').textContent = `Pending: ${inr(totalInst2Due)}`;
+
+      document.getElementById('statMonthlyCollected').textContent = inr(totalMonthlyCollected);
+      document.getElementById('statMonthlyPending').textContent = `Pending: ${inr(totalMonthlyDue)}`;
+
+      renderCharts(totalCollected, totalExpenses, totalAdmCollected, totalInst2Collected, totalMonthlyCollected);
+    }
+
+    function renderCharts(collected, expensesVal, adm, inst2, monthly) {
+      if (typeof Chart === 'undefined') return;
+
+      const ctx1 = document.getElementById('cashflowChart');
+      if (ctx1) {
+        if (cashflowChart) cashflowChart.destroy();
+        cashflowChart = new Chart(ctx1, {
+          type: 'bar',
+          data: {
+            labels: ['Total Fees Collected', 'Total Expenses', 'Net Balance in Hand'],
+            datasets: [{
+              data: [collected, expensesVal, collected - expensesVal],
+              backgroundColor: ['#10b981', '#f43f5e', '#4f46e5'],
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      }
+
+      const ctx2 = document.getElementById('ratioChart');
+      if (ctx2) {
+        if (ratioChart) ratioChart.destroy();
+        ratioChart = new Chart(ctx2, {
+          type: 'doughnut',
+          data: {
+            labels: ['Admission (₹1,500)', '2nd Inst (₹1,000)', 'Monthly (₹300/m)'],
+            datasets: [{
+              data: [adm || 1, inst2 || 1, monthly || 1],
+              backgroundColor: ['#f59e0b', '#3b82f6', '#10b981'],
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } }
+          }
+        });
+      }
+    }
+
+    /* ==================== STUDENTS & FEES ==================== */
+    function renderStudents() {
+      const q = document.getElementById('studentSearchInput').value.toLowerCase().trim();
+      const bFilter = document.getElementById('studentBatchFilter').value;
+      const sFilter = document.getElementById('studentStatusFilter').value;
+      const tbody = document.getElementById('studentTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const filtered = students.filter(st => {
+        const matchesQuery = st.name.toLowerCase().includes(q) || st.roll.toLowerCase().includes(q) || st.phone.includes(q);
+        const matchesBatch = bFilter === 'ALL' || st.batch === bFilter;
+        const dues = calculateStudentDues(st);
+        let matchesStatus = true;
+        if (sFilter === 'DUE') matchesStatus = dues.totalDue > 0;
+        if (sFilter === 'CLEARED') matchesStatus = dues.totalDue === 0;
+        return matchesQuery && matchesBatch && matchesStatus;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No students match current filter criteria.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(st => {
+        const dues = calculateStudentDues(st);
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold text-slate-900">${st.roll}</td>
+          <td class="p-3">
+            <div class="font-bold text-slate-800">${st.name}</div>
+            <div class="text-[11px] text-slate-400"><i class="fa-solid fa-phone text-[9px] mr-1"></i>${st.phone}</div>
+          </td>
+          <td class="p-3">
+            <span class="bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 rounded-lg text-[11px] font-semibold">${st.batch}</span>
+          </td>
+          <td class="p-3 text-slate-500 whitespace-nowrap">${st.joinDate}</td>
+          <td class="p-3 text-right">
+            ${dues.admDue === 0 ? '<span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Paid ₹1500</span>' : `<span class="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Due ₹${dues.admDue}</span>`}
+          </td>
+          <td class="p-3 text-right">
+            ${dues.inst2Due === 0 ? '<span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Paid ₹1000</span>' : `<span class="text-blue-800 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">Due ₹${dues.inst2Due}</span>`}
+          </td>
+          <td class="p-3 text-right">
+            ${dues.monthlyDue === 0 ? '<span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Cleared</span>' : `<span class="text-rose-800 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">Due ₹${dues.monthlyDue} (${dues.unpaidMonths}m)</span>`}
+          </td>
+          <td class="p-3 text-right font-num font-extrabold ${dues.totalDue > 0 ? 'text-rose-600' : 'text-emerald-600'}">
+            ${inr(dues.totalDue)}
+          </td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <div class="flex items-center justify-center space-x-1.5">
+              <button onclick="openFeeCollectModal('${st.id}')" title="Collect Fee" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-sm transition">
+                <i class="fa-solid fa-receipt mr-1"></i> Fee
+              </button>
+              <button onclick="sendWhatsAppReminder('${st.id}')" title="WhatsApp Reminder" class="bg-green-500 hover:bg-green-600 active:scale-95 text-white px-2 py-1 rounded-lg text-[11px] transition shadow-sm">
+                <i class="fa-brands fa-whatsapp"></i>
+              </button>
+              ${currentUser && currentUser.role === 'DIRECTOR' ? `
+                <button onclick="deleteStudent('${st.id}')" title="Delete Student" class="text-slate-400 hover:text-rose-600 p-1">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function initBatchesDropdown() {
+      const selects = [document.getElementById('studentBatchFilter'), document.getElementById('studBatch')];
+      selects.forEach(select => {
+        if (!select) return;
+        const isFilter = select.id === 'studentBatchFilter';
+        select.innerHTML = isFilter ? '<option value="ALL">All Batches</option>' : '';
+        batches.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.name;
+          opt.textContent = b.name;
+          select.appendChild(opt);
+        });
+      });
+    }
+
+    function openNewStudentModal() {
+      initBatchesDropdown();
+      document.getElementById('studentEnrollForm').reset();
+      document.getElementById('studDate').value = new Date().toISOString().split('T')[0];
+      openModal('studentModal');
+    }
+
+    function saveStudent(e) {
+      e.preventDefault();
+      const newSt = {
+        id: 'st_' + Date.now(),
+        name: document.getElementById('studName').value.trim(),
+        roll: document.getElementById('studRoll').value.trim(),
+        batch: document.getElementById('studBatch').value,
+        phone: document.getElementById('studPhone').value.trim(),
+        joinDate: document.getElementById('studDate').value,
+        feesPaid: { admission: 0, installment2: 0, monthlyMonths: 0 }
+      };
+      students.unshift(newSt);
+      saveData('vidya_inst_students', students);
+      pushStateToCloud();
+      closeModal('studentModal');
+      renderStudents();
+      renderDashboard();
+    }
+
+    function deleteStudent(id) {
+      if (!confirm("Are you sure you want to remove this student record?")) return;
+      students = students.filter(s => s.id !== id);
+      saveData('vidya_inst_students', students);
+      pushStateToCloud();
+      renderStudents();
+      renderDashboard();
+    }
+
+    function sendWhatsAppReminder(id) {
+      const st = students.find(s => s.id === id);
+      if (!st) return;
+      const dues = calculateStudentDues(st);
+      if (dues.totalDue === 0) {
+        alert("This student has cleared all dues (₹0 Balance).");
+        return;
+      }
+      const text = encodeURIComponent(
+        `Dear Parent/Student,\n\nFee reminder from *${institute.name}* for student *${st.name}* (Roll: ${st.roll}, Batch: ${st.batch}).\n\n` +
+        `Current Pending Due: *${inr(dues.totalDue)}*\n` +
+        `- Admission Fee Due: ₹${dues.admDue}\n` +
+        `- 2nd Installment Due: ₹${dues.inst2Due}\n` +
+        `- Tuition Fee Due: ₹${dues.monthlyDue} (${dues.unpaidMonths} Month(s))\n\n` +
+        `Kindly clear the pending fee at your earliest. Thank you!`
+      );
+      window.open(`https://wa.me/91${st.phone}?text=${text}`, '_blank');
+    }
+
+    let activeFeeStudent = null;
+    function openFeeCollectModal(studentId) {
+      activeFeeStudent = students.find(s => s.id === studentId);
+      if (!activeFeeStudent) return;
+
+      document.getElementById('feeStudentId').value = studentId;
+      const dues = calculateStudentDues(activeFeeStudent);
+      document.getElementById('feeCollectStudentHeader').innerHTML = `
+        <div class="flex items-center justify-between font-bold text-slate-800">
+          <span>${activeFeeStudent.name} (Roll: ${activeFeeStudent.roll})</span>
+          <span class="text-rose-600 font-num text-sm">Total Due: ${inr(dues.totalDue)}</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-0.5">Batch: ${activeFeeStudent.batch} &bull; Adm Due: ₹${dues.admDue} &bull; 2nd Inst: ₹${dues.inst2Due} &bull; Monthly: ₹${dues.monthlyDue}</div>
+      `;
+
+      autoFillFeeAmount();
+      openModal('feeCollectModal');
+    }
+
+    function autoFillFeeAmount() {
+      if (!activeFeeStudent) return;
+      const feeType = document.getElementById('feeType').value;
+      const dues = calculateStudentDues(activeFeeStudent);
+      const amtInput = document.getElementById('feeAmount');
+
+      if (feeType === 'ADMISSION') amtInput.value = dues.admDue || 1500;
+      if (feeType === 'INSTALLMENT_2') amtInput.value = dues.inst2Due || 1000;
+      if (feeType === 'MONTHLY') amtInput.value = 300;
+    }
+
+    function submitFeePayment(e) {
+      e.preventDefault();
+      if (!activeFeeStudent) return;
+
+      const feeType = document.getElementById('feeType').value;
+      const amount = Number(document.getElementById('feeAmount').value);
+      const mode = document.getElementById('feeMode').value;
+      const date = document.getElementById('feeDate').value;
+
+      if (feeType === 'ADMISSION') {
+        activeFeeStudent.feesPaid.admission = (activeFeeStudent.feesPaid.admission || 0) + amount;
+      } else if (feeType === 'INSTALLMENT_2') {
+        activeFeeStudent.feesPaid.installment2 = (activeFeeStudent.feesPaid.installment2 || 0) + amount;
+      } else if (feeType === 'MONTHLY') {
+        const monthsCount = Math.floor(amount / 300) || 1;
+        activeFeeStudent.feesPaid.monthlyMonths = (activeFeeStudent.feesPaid.monthlyMonths || 0) + monthsCount;
+      }
+
+      saveData('vidya_inst_students', students);
+      pushStateToCloud();
+      closeModal('feeCollectModal');
+
+      showReceipt(activeFeeStudent, feeType, amount, mode, date);
+      renderStudents();
+      renderDashboard();
+    }
+
+    function showReceipt(st, feeType, amount, mode, date) {
+      document.getElementById('receiptInstName').textContent = institute.name;
+      document.getElementById('receiptInstAddress').textContent = institute.address;
+      document.getElementById('receiptInstPhone').textContent = "Phone: " + institute.phone + (institute.regNo ? " • Reg: " + institute.regNo : "");
+      document.getElementById('receiptInstTerms').textContent = institute.terms;
+
+      document.getElementById('rNumber').textContent = '#' + Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('rDate').textContent = date;
+      document.getElementById('rStudentName').textContent = st.name;
+      document.getElementById('rStudentRoll').textContent = st.roll;
+      document.getElementById('rStudentBatch').textContent = st.batch;
+      document.getElementById('rMode').textContent = mode;
+
+      let typeDesc = "Monthly Tuition Fee (₹300)";
+      if (feeType === 'ADMISSION') typeDesc = "Admission Fee (1st Installment - ₹1,500)";
+      if (feeType === 'INSTALLMENT_2') typeDesc = "2nd Installment Fee (₹1,000)";
+
+      document.getElementById('rFeeType').textContent = typeDesc;
+      document.getElementById('rAmount').textContent = inr(amount);
+      document.getElementById('rTotalAmount').textContent = inr(amount);
+      document.getElementById('rCashier').textContent = currentUser ? currentUser.name : 'Authorized Staff';
+
+      openModal('receiptModal');
+    }
+
+    /* ==================== EXPENSES REGISTER ==================== */
+    function renderExpenses() {
+      const tbody = document.getElementById('expenseTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (expenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-400">No expense vouchers recorded.</td></tr>`;
+        return;
+      }
+
+      expenses.forEach(exp => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+        tr.innerHTML = `
+          <td class="p-3 text-slate-500 whitespace-nowrap">${exp.date}</td>
+          <td class="p-3 font-mono font-bold text-slate-700">#${exp.id.slice(-4)}</td>
+          <td class="p-3 whitespace-nowrap">
+            <span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg text-[11px] font-semibold">${exp.category}</span>
+          </td>
+          <td class="p-3 font-semibold text-slate-800">${exp.desc}</td>
+          <td class="p-3 text-slate-500 whitespace-nowrap">${exp.mode}</td>
+          <td class="p-3 text-slate-600 whitespace-nowrap font-medium">${exp.by || 'Admin'}</td>
+          <td class="p-3 text-right font-num font-bold text-rose-600">${inr(exp.amount)}</td>
+          <td class="p-3 text-center">
+            ${currentUser && currentUser.role === 'DIRECTOR' ? `
+              <button onclick="deleteExpense('${exp.id}')" title="Delete Voucher" class="text-slate-400 hover:text-rose-600 p-1">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            ` : '-'}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openAddExpenseModal() {
+      document.getElementById('expenseForm').reset();
+      document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+      openModal('expenseModal');
+    }
+
+    function saveExpense(e) {
+      e.preventDefault();
+      const newExp = {
+        id: 'exp_' + Date.now(),
+        date: document.getElementById('expDate').value,
+        category: document.getElementById('expCategory').value,
+        desc: document.getElementById('expDesc').value.trim(),
+        amount: Number(document.getElementById('expAmount').value),
+        mode: document.getElementById('expMode').value,
+        by: currentUser ? currentUser.name : 'Admin'
+      };
+      expenses.unshift(newExp);
+      saveData('vidya_inst_expenses', expenses);
+      pushStateToCloud();
+      closeModal('expenseModal');
+      renderExpenses();
+      renderDashboard();
+    }
+
+    function deleteExpense(id) {
+      if (!confirm("Are you sure you want to delete this expense voucher?")) return;
+      expenses = expenses.filter(e => e.id !== id);
+      saveData('vidya_inst_expenses', expenses);
+      pushStateToCloud();
+      renderExpenses();
+      renderDashboard();
+    }
+
+    /* ==================== BATCHES & EDIT ==================== */
+    function renderBatches() {
+      const grid = document.getElementById('batchCardGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      batches.forEach(b => {
+        const count = students.filter(s => s.batch === b.name).length;
+        const card = document.createElement('div');
+        card.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative space-y-3";
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <h4 class="font-bold text-slate-900 text-sm">${b.name}</h4>
+            <span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-lg font-bold border border-indigo-200">${count} Students</span>
+          </div>
+          <div class="text-xs text-slate-500 space-y-1">
+            <div><i class="fa-regular fa-clock mr-1.5 text-slate-400"></i> ${b.time}</div>
+            <div><i class="fa-solid fa-chalkboard-user mr-1.5 text-slate-400"></i> Faculty: <strong>${b.teacher || 'Unassigned'}</strong></div>
+          </div>
+          ${currentUser && currentUser.role === 'DIRECTOR' ? `
+            <div class="pt-2 border-t border-slate-100 flex justify-end">
+              <button onclick="editBatchPrompt('${b.name}')" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-1">
+                <i class="fa-solid fa-pen-to-square"></i> Edit Batch
+              </button>
+            </div>
+          ` : ''}
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function openAddBatchModal() {
+      document.getElementById('batchForm').reset();
+      document.getElementById('editBatchOriginalName').value = '';
+      document.getElementById('batchModalTitle').textContent = "Add New Batch";
+      openModal('batchModal');
+    }
+
+    function editBatchPrompt(batchName) {
+      const b = batches.find(item => item.name === batchName);
+      if (!b) return;
+      document.getElementById('editBatchOriginalName').value = b.name;
+      document.getElementById('batchNameInput').value = b.name;
+      document.getElementById('batchTimeInput').value = b.time;
+      document.getElementById('batchTeacherInput').value = b.teacher || '';
+      document.getElementById('batchModalTitle').textContent = "Edit Batch: " + b.name;
+      openModal('batchModal');
+    }
+
+    function saveBatch(e) {
+      e.preventDefault();
+      const original = document.getElementById('editBatchOriginalName').value;
+      const newName = document.getElementById('batchNameInput').value.trim();
+      const newTime = document.getElementById('batchTimeInput').value.trim();
+      const newTeacher = document.getElementById('batchTeacherInput').value.trim();
+
+      if (original) {
+        const found = batches.find(b => b.name === original);
+        if (found) {
+          found.name = newName;
+          found.time = newTime;
+          found.teacher = newTeacher;
+        }
+        students.forEach(st => {
+          if (st.batch === original) st.batch = newName;
+        });
+        saveData('vidya_inst_students', students);
+      } else {
+        batches.push({ name: newName, time: newTime, teacher: newTeacher });
+      }
+
+      saveData('vidya_inst_batches', batches);
+      pushStateToCloud();
+      initBatchesDropdown();
+      closeModal('batchModal');
+      renderBatches();
+    }
+
+    /* ==================== INSTITUTE PROFILE ==================== */
+    function openInstituteSettingsModal() {
+      document.getElementById('instName').value = institute.name;
+      document.getElementById('instTagline').value = institute.tagline;
+      document.getElementById('instPhone').value = institute.phone;
+      document.getElementById('instRegNo').value = institute.regNo;
+      document.getElementById('instAddress').value = institute.address;
+      document.getElementById('instTerms').value = institute.terms;
+      openModal('instituteModal');
+    }
+
+    function saveInstituteSettings(e) {
+      e.preventDefault();
+      institute = {
+        name: document.getElementById('instName').value.trim(),
+        tagline: document.getElementById('instTagline').value.trim(),
+        phone: document.getElementById('instPhone').value.trim(),
+        regNo: document.getElementById('instRegNo').value.trim(),
+        address: document.getElementById('instAddress').value.trim(),
+        terms: document.getElementById('instTerms').value.trim()
+      };
+      saveData('vidya_inst_info', institute);
+      pushStateToCloud();
+      applyInstituteHeaders();
+      closeModal('instituteModal');
+      renderDashboard();
+    }
+
+    /* ==================== MODAL HELPERS ==================== */
+    function openModal(id) {
+      const m = document.getElementById(id);
+      if (m) m.classList.remove('hidden');
+    }
+    function closeModal(id) {
+      const m = document.getElementById(id);
+      if (m) m.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
